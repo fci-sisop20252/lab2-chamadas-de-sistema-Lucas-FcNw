@@ -1,0 +1,210 @@
+# 📝 Relatório do Laboratório 2 - Chamadas de Sistema
+
+---
+
+## 1️⃣ Exercício 1a - Observação printf() vs 1b - write()
+
+### 💻 Comandos executados:
+```bash
+strace -e write ./ex1a_printf
+strace -e write ./ex1b_write
+```
+
+### 🔍 Análise
+
+**1. Quantas syscalls write() cada programa gerou?**
+- ex1a_printf: ___1__ syscalls
+- ex1b_write: ___5__ syscalls
+
+**2. Por que há diferença entre os dois métodos? Consulte o docs/printf_vs_write.md**
+
+```
+Ela existe pois a diferença está presente no buffering do I/O.
+O write gera uma chamada imediata ao Kernel, não tendo buffering, já o printf é função "padrão" pois vem na biblioteca padrão do C, o qual acumula dados no buffer.
+```
+
+**3. Qual método é mais previsível? Por quê você acha isso?**
+
+```
+Write é mais previsível pois ele corresponde diretamente a uma chamada de sistema. O printf por usar o Buffer depende do estado do mesmo na stdio.
+```
+
+---
+
+## 2️⃣ Exercício 2 - Leitura de Arquivo
+
+### 📊 Resultados da execução:
+- File descriptor: 3
+- Bytes lidos: 134
+
+### 🔧 Comando strace:
+```bash
+strace -e openat,read,close ./ex2_leitura
+```
+
+### 🔍 Análise
+
+**1. Qual file descriptor foi usado? Por que não começou em 0, 1 ou 2?**
+
+```
+Foi usado o 3, pois o shell reserva o 0, 1 e 2 para todos os processos. Em outras palavras, o 0 e o 1 são usados para entrada de teclado, e o 2 é utilizado para exibir a saída no terminal, como quando ocorre um erro e o programa apresenta uma mensagem.
+
+```
+
+**2. Como você sabe que o arquivo foi lido completamente?**
+
+```
+Por conta do comportamento da chamada read(). O laço criado pelo while continua rodando enqunato o read() lê ao menos 1 byte.
+```
+
+**3. Por que verificar retorno de cada syscall?**
+
+```
+Simples: se você não fizer isso, pode acabar deixando passar erros e "perdendo" o controle sobre o gerenciamento das operações parciais, etc...
+
+```
+---
+
+## 3️⃣ Exercício 3 - Contador com Loop
+
+### 📋 Resultados (BUFFER_SIZE = 64):
+- Linhas: 25 (esperado: 25)
+- Caracteres: 700
+- Chamadas read(): 11
+- Tempo: ~0.000045  segundos
+
+### 🧪 Experimentos com buffer:
+
+| Buffer Size | Chamadas read() | Tempo (s) |
+|-------------|-----------------|-----------|
+| 16          |       44        | ~0.000062 |
+| 64          |       11        | ~0.000045 |
+| 256         |        3        | ~0.000038 |
+| 1024        |        1        | ~0.000035 |
+
+Exportar para as Planilhas 
+
+### 🔍 Análise
+
+**1. Como o tamanho do buffer afeta o número de syscalls?**
+
+```
+O buffer tem seu tamanho inversamente proporcional ao número de syscalls do read(). Um buffer maior permite mais pedidos e recebimentos de dados do Kernel em uma única chamada.
+```
+
+**2. Todas as chamadas read() retornaram BUFFER_SIZE bytes? Discorra brevemente sobre**
+
+```
+Não. A última chamada de um read() quase sempre retorna um valor menor que o Buffer_Size, pois o tamanho do arquivo dificilmente é um múltiplo exato do tamanho do buffer.
+```
+
+**3. Qual é a relação entre syscalls e performance?**
+
+```
+Syscalls é uma operação bem cara do ponto de vista computacional, a redução delas é uma das principais otimizações de performance, pois ele sempre força a mudança de usuário para kernel.
+```
+
+---
+
+## 4️⃣ Exercício 4 - Cópia de Arquivo
+
+### 📈 Resultados:
+- Bytes copiados: 10240000
+- Operações: 5000
+- Tempo: ~0.005123  segundos
+- Throughput: 1951981.46  KB/s
+
+### ✅ Verificação:
+```bash
+diff dados/origem.txt dados/destino.txt
+```
+Resultado: [X] Idênticos [ ] Diferentes
+
+### 🔍 Análise
+
+**1. Por que devemos verificar que bytes_escritos == bytes_lidos?**
+
+```
+Só verificando os bytes podemos garantir a integridade dos dados.
+```
+
+**2. Que flags são essenciais no open() do destino?**
+
+```
+O_WRONLY; O_CREAT; O_TRUNC.
+```
+
+**3. O número de reads e writes é igual? Por quê?**
+
+```
+Pois, na cópia de um disco, para cada chamada de read() é executada uma chamada de write(), seguindo a lógica de 1x1. Só pode ser diferente quando há tratamento de escritas parciais.
+```
+
+**4. Como você saberia se o disco ficou cheio?**
+
+```
+O write() iria retornar a falha -1 e o código ENOSPC.
+```
+
+**5. O que acontece se esquecer de fechar os arquivos?**
+
+```
+Haveria vaazmento de recursos e poderia afetar a conscitencia dos dados, levando a crash do sistema.
+```
+
+---
+
+## 🎯 Análise Geral
+
+### 📖 Conceitos Fundamentais
+
+**1. Como as syscalls demonstram a transição usuário → kernel?**
+
+```
+A operação de uma syscall é direta, forçando a troca de modo. Ao utilizar o strace, essa troca se torna visível.
+```
+
+**2. Qual é o seu entendimento sobre a importância dos file descriptors?**
+
+```
+Eles são importantes por demonstrarem todas as fontes I/O como um número inteiro, permitindo o read() e o write() operarem em recursos completamente distintos. 
+```
+
+**3. Discorra sobre a relação entre o tamanho do buffer e performance:**
+
+```
+Buffer maior = menos syscalls, melhorando a performance do sistema. Só atentar que o buffer pode chegar a um ponto em que continuar aumentando só causa desperdício de memória.
+```
+
+### ⚡ Comparação de Performance
+
+```bash
+# Teste seu programa vs cp do sistema
+time ./ex4_copia
+time cp dados/origem.txt dados/destino_cp.txt
+```
+
+**Qual foi mais rápido?** _____
+
+**Por que você acha que foi mais rápido?**
+
+```
+O cp é melhor: ele sempre define um buffer estupidamente grande, o que reduz o número de syscalls e melhora a performance. Além disso, o cp permite que o syscall copie dados diretamente entre dois arquivos, sem precisar trazer tudo pro espaço de usuário. E claro, o cp tem anos de otimizações (e não foi feito por mim, o que já ajuda bastante).
+```
+
+---
+
+## 📤 Entrega
+Certifique-se de ter:
+- [ ] Todos os códigos com TODOs completados
+- [ ] Traces salvos em `traces/`
+- [ ] Este relatório preenchido como `RELATORIO.md`
+
+```bash
+strace -e write -o traces/ex1a_trace.txt ./ex1a_printf
+strace -e write -o traces/ex1b_trace.txt ./ex1b_write
+strace -o traces/ex2_trace.txt ./ex2_leitura
+strace -c -o traces/ex3_stats.txt ./ex3_contador
+strace -o traces/ex4_trace.txt ./ex4_copia
+```
+# Bom trabalho!
